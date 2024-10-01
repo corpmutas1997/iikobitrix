@@ -1,6 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const fetch = require('node-fetch');
+const mongoose = require('mongoose');
+const cron = require('node-cron');
 const app = express();
 
 // Битрикс24 URL для создания сделки, контакта и смарт-процесса
@@ -8,10 +10,27 @@ const bitrix24WebhookUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uav
 const bitrix24SmartProcessUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.item.add'; // URL для смарт-процесса
 const bitrix24ContactUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.contact.add';
 
-// ID смарт-процесса
-const smartProcessEntityTypeId = 1036 ; // Укажите правильный ID вашего смарт-процесса
+// ID смарт-процессов
+const smartProcessEntityTypeId = 1036; // ID основного смарт-процесса
+const lostCustomerProcessEntityTypeId = 2048; // ID смарт-процесса для потерянных клиентов (замени на актуальный ID)
 
-// Middleware для обработки JSON данных в теле запроса
+// Подключение к MongoDB
+mongoose.connect('mongodb://localhost:27017/ordersDB', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+});
+
+// Схема для заказов
+const orderSchema = new mongoose.Schema({
+    customerId: String,
+    customerName: String,
+    phone: String,
+    lastOrderDate: Date,
+    isLost: { type: Boolean, default: false }
+});
+
+const Order = mongoose.model('Order', orderSchema);
+
 app.use(bodyParser.json());
 
 // Эндпоинт для приема вебхуков
@@ -32,6 +51,26 @@ app.post('/webhook', async (req, res) => {
         const customerName = hookData[0]?.eventInfo?.order?.customer?.name || 'Неизвестный клиент';
         const phone = hookData[0]?.eventInfo?.order?.phone || 'Телефон не указан';
         const totalAmount = hookData[0]?.eventInfo?.order?.sum || 0;
+        const customerId = hookData[0]?.eventInfo?.order?.customer?.id || 'Unknown';
+
+        // Сохраняем заказ в MongoDB или обновляем последний заказ клиента
+        let order = await Order.findOne({ customerId });
+
+        if (order) {
+            // Обновляем дату последнего заказа
+            order.lastOrderDate = new Date();
+            order.isLost = false;
+        } else {
+            // Создаем новый заказ
+            order = new Order({
+                customerId,
+                customerName,
+                phone,
+                lastOrderDate: new Date()
+            });
+        }
+
+        await order.save();
 
         // Создаем контакт в Битрикс24 для клиента
         const contactData = {
@@ -67,7 +106,7 @@ app.post('/webhook', async (req, res) => {
 
                 // Данные для создания элемента в смарт-процессе (если доставка опоздала)
                 const smartProcessData = {
-                    entityTypeId: smartProcessEntityTypeId, // Используем отдельную переменную для ID смарт-процесса
+                    entityTypeId: smartProcessEntityTypeId, // Основной смарт-процесс
                     fields: {
                         TITLE: `Опоздавший заказ №${orderId} от ${customerName}`,
                         OPPORTUNITY: totalAmount, // Сумма заказа
@@ -136,6 +175,49 @@ app.post('/webhook', async (req, res) => {
         }
     } else {
         res.status(200).send('Webhook получен, но статус не Closed');
+    }
+});
+
+// Функция для отправки потерянного клиента в смарт-процесс для потерянных клиентов
+async function sendToLostCustomerProcess(order) {
+    const smartProcessData = {
+        entityTypeId: lostCustomerProcessEntityTypeId, // Смарт-процесс для потерянных клиентов
+        fields: {
+            TITLE: `Потерянный клиент ${order.customerName}`,
+            CONTACT_ID: order.customerId,
+            COMMENTS: `Клиент не заказывал более 21 дня.`
+        }
+    };
+
+    try {
+        const response = await fetch(bitrix24SmartProcessUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(smartProcessData),
+        });
+        const result = await response.json();
+        console.log('Ответ Битрикс24 (Потерянный клиент - Смарт-процесс):', result);
+    } catch (error) {
+        console.error('Ошибка при отправке в смарт-процесс потерянного клиента:', error);
+    }
+}
+
+// Планировщик для проверки неактивных клиентов
+cron.schedule('0 0 * * *', async () => {
+    const twentyOneDaysAgo = new Date();
+    twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
+
+    try {
+        const lostOrders = await Order.find({ lastOrderDate: { $lt: twentyOneDaysAgo }, isLost: false });
+        lostOrders.forEach(async (order) => {
+            await sendToLostCustomerProcess(order);
+            order.isLost = true;
+            await order.save();
+        });
+    } catch (error) {
+        console.error('Ошибка при проверке потерянных клиентов:', error);
     }
 });
 
