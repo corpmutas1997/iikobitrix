@@ -12,7 +12,7 @@ const bitrix24ContactUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uav
 
 // ID смарт-процессов
 const smartProcessEntityTypeId = 1036; // ID основного смарт-процесса
-const lostCustomerProcessEntityTypeId = 2048; // ID смарт-процесса для потерянных клиентов (замени на актуальный ID)
+const lostCustomerProcessEntityTypeId = 1046; // ID смарт-процесса для потерянных клиентов (замени на актуальный ID)
 
 // Подключение к MongoDB
 mongoose.connect('mongodb://localhost:27017/ordersDB', {
