@@ -14,11 +14,8 @@ const bitrix24ContactUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uav
 const smartProcessEntityTypeId = 1036; // ID основного смарт-процесса
 const lostCustomerProcessEntityTypeId = 1046; // ID смарт-процесса для потерянных клиентов (замени на актуальный ID)
 
-// Подключение к MongoDB
-mongoose.connect('mongodb://localhost:27017/ordersDB', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-});
+// Подключение к MongoDB (убрал устаревшие опции)
+mongoose.connect('mongodb://localhost:27017/ordersDB');
 
 // Схема для заказов
 const orderSchema = new mongoose.Schema({
@@ -205,26 +202,6 @@ async function sendToLostCustomerProcess(order) {
 }
 
 // Планировщик для проверки неактивных клиентов
-
-// Временно вызови функцию отправки потерянных клиентов вручную для тестирования
-(async function testLostCustomers() {
-    const twentyOneDaysAgo = new Date();
-    twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
-  
-    try {
-      const lostOrders = await Order.find({ lastOrderDate: { $lt: twentyOneDaysAgo }, isLost: false });
-      lostOrders.forEach(async (order) => {
-        await sendToLostCustomerProcess(order);
-        order.isLost = true;  // Пометить клиента как "потерянный", чтобы не отправлять повторно
-        await order.save();
-      });
-      console.log("Тестирование отправки потерянных клиентов завершено.");
-    } catch (error) {
-      console.error("Ошибка при тестировании потерянных клиентов:", error);
-    }
-  })();
-  
-
 cron.schedule('0 0 * * *', async () => {
     const twentyOneDaysAgo = new Date();
     twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
