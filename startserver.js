@@ -205,6 +205,26 @@ async function sendToLostCustomerProcess(order) {
 }
 
 // Планировщик для проверки неактивных клиентов
+
+// Временно вызови функцию отправки потерянных клиентов вручную для тестирования
+(async function testLostCustomers() {
+    const twentyOneDaysAgo = new Date();
+    twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
+  
+    try {
+      const lostOrders = await Order.find({ lastOrderDate: { $lt: twentyOneDaysAgo }, isLost: false });
+      lostOrders.forEach(async (order) => {
+        await sendToLostCustomerProcess(order);
+        order.isLost = true;  // Пометить клиента как "потерянный", чтобы не отправлять повторно
+        await order.save();
+      });
+      console.log("Тестирование отправки потерянных клиентов завершено.");
+    } catch (error) {
+      console.error("Ошибка при тестировании потерянных клиентов:", error);
+    }
+  })();
+  
+
 cron.schedule('0 0 * * *', async () => {
     const twentyOneDaysAgo = new Date();
     twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
