@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
-const { Order, sendToLostCustomerProcess } = require('./startserver');
+const { Order } = require('./db');  // Импорт модели Order
 
-// Подключение к базе данных
-mongoose.connect('mongodb://localhost:27017/ordersDB').then(async () => {
+// Подключение к базе данных через db.js (если нужно вручную)
+mongoose.connection.on('connected', async () => {
     const twentyOneDaysAgo = new Date();
     twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
 
