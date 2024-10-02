@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
-const { Order } = require('./db');  // Импорт модели Order
+const { Order } = require('./db');
 
 // URL для Bitrix24 смарт-процесса
 const bitrix24SmartProcessUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.item.add'; 
@@ -46,12 +46,10 @@ async function sendToLostCustomerProcess(order) {
         await mongoose.connect('mongodb://localhost:27017/ordersDB');
         console.log("Подключение к базе данных установлено.");
 
-        // Устанавливаем дату 21 дня назад и сбрасываем время до начала дня
-        const twentyOneDaysAgo = new Date();
-        twentyOneDaysAgo.setHours(0, 0, 0, 0); // Сброс времени до начала дня
-        twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
+        // Устанавливаем timestamp для 21 дня назад
+        const twentyOneDaysAgo = new Date().getTime() - (21 * 24 * 60 * 60 * 1000); // 21 день в миллисекундах
 
-        console.log(`Дата для проверки потерянных клиентов: ${twentyOneDaysAgo}`);
+        console.log(`Таймстамп для проверки потерянных клиентов: ${twentyOneDaysAgo}`);
 
         // Находим клиентов, которые не делали заказ более 21 дня назад и не помечены как потерянные
         const lostOrders = await Order.find({
