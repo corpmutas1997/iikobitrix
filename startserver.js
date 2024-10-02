@@ -12,17 +12,17 @@ const bitrix24ContactUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uav
 
 // ID смарт-процессов
 const smartProcessEntityTypeId = 1036; // ID основного смарт-процесса
-const lostCustomerProcessEntityTypeId = 1046; // ID смарт-процесса для потерянных клиентов (замени на актуальный ID)
+const lostCustomerProcessEntityTypeId = 1046; // ID смарт-процесса для потерянных клиентов
 
-// Подключение к MongoDB (убрал устаревшие опции)
+// Подключение к MongoDB (убраны устаревшие опции)
 mongoose.connect('mongodb://localhost:27017/ordersDB');
 
-// Схема для заказов
+// Схема для заказов, с хранением даты в виде timestamp
 const orderSchema = new mongoose.Schema({
     customerId: String,
     customerName: String,
     phone: String,
-    lastOrderDate: Date,
+    lastOrderDate: Number,  // Храним дату как timestamp
     isLost: { type: Boolean, default: false }
 });
 
@@ -55,15 +55,15 @@ app.post('/webhook', async (req, res) => {
 
         if (order) {
             // Обновляем дату последнего заказа
-            order.lastOrderDate = new Date();
-            order.isLost = false;
+            order.lastOrderDate = Date.now();  // Используем текущий timestamp
+            order.isLost = false;  // Сбрасываем статус потерянного клиента
         } else {
             // Создаем новый заказ
             order = new Order({
                 customerId,
                 customerName,
                 phone,
-                lastOrderDate: new Date()
+                lastOrderDate: Date.now()  // Устанавливаем текущий timestamp
             });
         }
 
@@ -203,8 +203,7 @@ async function sendToLostCustomerProcess(order) {
 
 // Планировщик для проверки неактивных клиентов
 cron.schedule('0 0 * * *', async () => {
-    const twentyOneDaysAgo = new Date();
-    twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
+    const twentyOneDaysAgo = Date.now() - (21 * 24 * 60 * 60 * 1000);  // 21 день назад в миллисекундах
 
     try {
         const lostOrders = await Order.find({ lastOrderDate: { $lt: twentyOneDaysAgo }, isLost: false });
