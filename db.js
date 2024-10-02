@@ -1,10 +1,7 @@
 const mongoose = require('mongoose');
 
 // Подключение к MongoDB
-mongoose.connect('mongodb://localhost:27017/ordersDB', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-});
+mongoose.connect('mongodb://localhost:27017/ordersDB', );
 
 // Схема для заказов
 const orderSchema = new mongoose.Schema({
