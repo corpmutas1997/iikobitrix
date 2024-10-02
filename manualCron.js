@@ -42,15 +42,23 @@ async function sendToLostCustomerProcess(order) {
 // Подключение к базе данных и запуск проверки потерянных клиентов
 (async function runManualCron() {
     try {
-        // Подключение к MongoDB (если нужно вручную)
+        // Подключение к MongoDB
         await mongoose.connect('mongodb://localhost:27017/ordersDB');
         console.log("Подключение к базе данных установлено.");
 
+        // Устанавливаем дату 21 дня назад и сбрасываем время до начала дня
         const twentyOneDaysAgo = new Date();
+        twentyOneDaysAgo.setHours(0, 0, 0, 0); // Сброс времени до начала дня
         twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
 
-        console.log("Запуск ручной проверки потерянных клиентов...");
-        const lostOrders = await Order.find({ lastOrderDate: { $lt: twentyOneDaysAgo }, isLost: false });
+        console.log(`Дата для проверки потерянных клиентов: ${twentyOneDaysAgo}`);
+
+        // Находим клиентов, которые не делали заказ более 21 дня назад и не помечены как потерянные
+        const lostOrders = await Order.find({
+            lastOrderDate: { $lt: twentyOneDaysAgo },
+            isLost: false
+        });
+
         console.log(`Найдено потерянных клиентов: ${lostOrders.length}`);
 
         if (lostOrders.length === 0) {
