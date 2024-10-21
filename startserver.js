@@ -7,12 +7,7 @@ const app = express();
 
 // Битрикс24 URL для создания сделки, контакта и смарт-процесса
 const bitrix24WebhookUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.deal.add';
-const bitrix24SmartProcessUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.item.add'; // URL для смарт-процесса
 const bitrix24ContactUrl = 'https://b24-tej813.bitrix24.kz/rest/1/p2vjnb69pq6uavl2/crm.contact.add';
-
-// ID смарт-процессов
-const smartProcessEntityTypeId = 1036; // ID основного смарт-процесса
-const lostCustomerProcessEntityTypeId = 1046; // ID смарт-процесса для потерянных клиентов
 
 // Подключение к MongoDB (убраны устаревшие опции)
 mongoose.connect('mongodb://localhost:27017/ordersDB');
@@ -97,53 +92,56 @@ app.post('/webhook', async (req, res) => {
 
             const contactId = contactResult.result; // Идентификатор созданного контакта
 
-            // Проверяем время опоздания и создаем либо смарт-процесс, либо обычную сделку
+            // Проверяем время опоздания и создаем либо сделку с пометкой о задержке
             if (deliveryDelay > 0) {
                 console.log(`Доставка опоздала на ${deliveryDelay} минут относительно ожидаемого времени.`);
 
-                // Данные для создания элемента в смарт-процессе (если доставка опоздала)
-                const smartProcessData = {
-                    entityTypeId: smartProcessEntityTypeId, // Основной смарт-процесс
+                // Данные для создания сделки (если доставка опоздала)
+                const dealData = {
                     fields: {
                         TITLE: `Опоздавший заказ №${orderId} от ${customerName}`,
-                        OPPORTUNITY: totalAmount, // Сумма заказа
-                        CONTACT_ID: contactId, // Привязываем к контакту
-                        COMMENTS: `Заказ от клиента: ${customerName}, Телефон: ${phone}, Доставка опоздала на ${deliveryDelay.toFixed(2)} минут`
+                        STAGE_ID: 'NEW',  // Стадия сделки
+                        OPENED: 'Y',  // Сделка открыта
+                        ASSIGNED_BY_ID: 1,  // Ответственный менеджер
+                        CURRENCY_ID: 'KZT',  // Указываем валюту тенге
+                        OPPORTUNITY: totalAmount,  // Сумма сделки
+                        COMMENTS: `Заказ от клиента: ${customerName}, Телефон: ${phone}, Доставка опоздала на ${deliveryDelay.toFixed(2)} минут`,  // Добавляем комментарий о задержке
+                        CONTACT_ID: contactId  // Привязываем сделку к контакту
                     }
                 };
 
-                // Создаем элемент смарт-процесса
-                const smartProcessResponse = await fetch(bitrix24SmartProcessUrl, {
+                // Создаем сделку в Bitrix24
+                const dealResponse = await fetch(bitrix24WebhookUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(smartProcessData),
+                    body: JSON.stringify(dealData),
                 });
 
-                const smartProcessResult = await smartProcessResponse.json();
-                console.log('Ответ Битрикс24 (Смарт-процесс):', smartProcessResult);
+                const dealResult = await dealResponse.json();
+                console.log('Ответ Битрикс24 (Сделка - Опоздавшая доставка):', dealResult);
 
-                if (smartProcessResult.error) {
-                    console.error('Ошибка при создании элемента в смарт-процессе:', smartProcessResult.error);
-                    return res.status(500).json({ error: 'Ошибка создания элемента смарт-процесса в Битрикс' });
+                if (dealResult.error) {
+                    console.error('Ошибка при создании сделки для опоздавшей доставки:', dealResult.error);
+                    return res.status(500).json({ error: 'Ошибка создания сделки в Битрикс для опоздавшей доставки' });
                 }
 
-                res.status(200).json({ message: 'Доставка опоздала, создан элемент в смарт-процессе' });
+                res.status(200).json({ message: 'Создана сделка для опоздавшей доставки' });
             } else {
                 console.log('Доставка в срок. Будет создана обычная сделка.');
 
-                // Данные для создания сделки (если доставка не опоздала)
+                // Данные для создания обычной сделки
                 const dealData = {
                     fields: {
                         TITLE: `Заказ №${orderId} от ${customerName}`,
                         STAGE_ID: 'NEW',
                         OPENED: 'Y',
-                        ASSIGNED_BY_ID: 1, // Ответственный менеджер
-                        CURRENCY_ID: 'KZT', // Указываем валюту тенге
-                        OPPORTUNITY: totalAmount, // Сумма сделки
+                        ASSIGNED_BY_ID: 1,
+                        CURRENCY_ID: 'KZT',
+                        OPPORTUNITY: totalAmount,
                         COMMENTS: `Заказ от клиента: ${customerName}, Телефон: ${phone}`,
-                        CONTACT_ID: contactId // Привязываем сделку к контакту
+                        CONTACT_ID: contactId
                     }
                 };
 
